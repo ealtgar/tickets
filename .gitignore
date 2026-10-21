@@ -1,0 +1,86 @@
+# =========================
+# Entornos Virtuales
+# =========================
+venv/
+.venv/
+env/
+.env_dir/
+
+# =========================
+# Compilados de Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+
+# =========================
+# Secretos y Credenciales (Crítico)
+# =========================
+.env
+.env.*
+*.pem
+*.key
+*.cert
+*.crt
+# Evita subir claves privadas o tokens temporales
+secrets.json
+client_secret.json
+cookies
+
+# =========================
+# Bases de Datos Locales
+# =========================
+# Si usas SQLite para pruebas en FastAPI
+*.db
+*.sqlite
+*.sqlite3
+db.sqlite3
+
+# =========================
+# Logs y Auditoría
+# =========================
+*.log
+# Útil si guardas volcados de red o reportes de herramientas de pentesting en la misma carpeta
+*.pcap
+*.req
+*.rep
+/logs/
+
+# =========================
+# Testing y Cobertura
+# =========================
+.htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.sved
+.pytest_cache/
+
+# =========================
+# IDEs y Sistema Operativo
+# =========================
+.vscode/
+.idea/
+__pypackages__/
+.DS_Store
+Thumbs.db
