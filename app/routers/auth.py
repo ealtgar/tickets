@@ -54,7 +54,7 @@ def _client_info(request: Request | None) -> tuple[str | None, str | None]:
     )
 
 
-def _set_refresh_cookie(response: Response, token: str) -> None:
+def set_refresh_cookie(response: Response, token: str) -> None:
     response.set_cookie(
         key=REFRESH_COOKIE_NAME,
         value=token,
@@ -66,7 +66,7 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
     )
 
 
-def _clear_refresh_cookie(response: Response) -> None:
+def clear_refresh_cookie(response: Response) -> None:
     response.delete_cookie(
         key=REFRESH_COOKIE_NAME,
         path=REFRESH_COOKIE_PATH,
@@ -90,7 +90,7 @@ def _candidate_tokens(
     return list(dict.fromkeys(tokens))
 
 
-def _issue_tokens(
+def issue_tokens(
     db: Session,
     user: models.User,
     request: Request | None = None,
@@ -199,8 +199,8 @@ def login(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Usuario inactivo"
         )
-    tokens = _issue_tokens(db, user, request)
-    _set_refresh_cookie(response, tokens.refresh_token)
+    tokens = issue_tokens(db, user, request)
+    set_refresh_cookie(response, tokens.refresh_token)
     return tokens
 
 
@@ -233,10 +233,10 @@ def refresh(
         crud.revoke_refresh_token_family(db, record.family_id, REVOKE_LOGOUT)
         raise _unauthorized("Usuario no válido")
 
-    tokens = _issue_tokens(
+    tokens = issue_tokens(
         db, user, request, family_id=record.family_id, rotate_from=record
     )
-    _set_refresh_cookie(response, tokens.refresh_token)
+    set_refresh_cookie(response, tokens.refresh_token)
     return tokens
 
 
@@ -255,7 +255,7 @@ def logout(
         if record is not None:
             crud.revoke_refresh_token_family(db, record.family_id, REVOKE_LOGOUT)
             break
-    _clear_refresh_cookie(response)
+    clear_refresh_cookie(response)
     return None
 
 
@@ -274,7 +274,7 @@ def logout_all(
         if user is not None:
             crud.revoke_user_refresh_tokens(db, user.id, REVOKE_LOGOUT_ALL)
             break
-    _clear_refresh_cookie(response)
+    clear_refresh_cookie(response)
     return None
 
 

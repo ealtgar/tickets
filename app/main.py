@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import crud
 from .database import Base, SessionLocal, engine
-from .routers import auth, comments, tickets, users
+from .routers import auth, comments, oauth, tickets, users
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -46,6 +46,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(oauth.router)
 app.include_router(tickets.router)
 app.include_router(comments.router)
 app.include_router(users.router)

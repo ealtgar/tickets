@@ -524,8 +524,50 @@ function bindEvents() {
   });
 }
 
+function clearOAuthQuery() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("oauth") && !url.searchParams.has("oauth_error")) return;
+  url.searchParams.delete("oauth");
+  url.searchParams.delete("oauth_error");
+  const search = url.searchParams.toString();
+  window.history.replaceState(
+    {},
+    "",
+    url.pathname + (search ? "?" + search : "") + url.hash
+  );
+}
+
+async function completeOAuthLogin() {
+  try {
+    await refreshSession();
+    localStorage.setItem(SESSION_KEY, "1");
+    state.user = await api("/api/auth/me");
+    showApp();
+    state.skip = 0;
+    await loadTickets();
+    toast("Sesión iniciada");
+    return true;
+  } catch (_) {
+    clearSession();
+    toast("No se pudo completar el inicio de sesión", true);
+    return false;
+  }
+}
+
 async function init() {
   bindEvents();
+
+  const params = new URLSearchParams(window.location.search);
+  const oauthError = params.get("oauth_error");
+  const oauthSuccess = params.get("oauth") === "success";
+  if (oauthError) {
+    clearOAuthQuery();
+    toast(oauthError, true);
+  } else if (oauthSuccess) {
+    clearOAuthQuery();
+    if (await completeOAuthLogin()) return;
+  }
+
   state.token = localStorage.getItem(TOKEN_KEY);
   state.refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
   const hasSession = localStorage.getItem(SESSION_KEY) === "1";

@@ -1,9 +1,12 @@
+import re
+import secrets
 from datetime import datetime, timezone
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from . import models, schemas
+from .oauth import OAuthProfile
 from .security import hash_password, utcnow
 
 
@@ -27,6 +30,105 @@ def create_user(db: Session, data: schemas.UserCreate) -> models.User:
         role=data.role,
     )
     db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def get_oauth_account(
+    db: Session, provider: str, provider_user_id: str
+) -> models.OAuthAccount | None:
+    return db.scalar(
+        select(models.OAuthAccount).where(
+            models.OAuthAccount.provider == provider,
+            models.OAuthAccount.provider_user_id == provider_user_id,
+        )
+    )
+
+
+def _unique_username(db: Session, base: str) -> str:
+    candidate = re.sub(r"[^A-Za-z0-9._-]", "", base or "").strip("._-")
+    if len(candidate) < 3:
+        candidate = f"user{candidate}"
+    candidate = candidate[:50]
+
+    def taken(value: str) -> bool:
+        return (
+            db.scalar(select(models.User.id).where(models.User.username == value))
+            is not None
+        )
+
+    if not taken(candidate):
+        return candidate
+    suffix = 1
+    while True:
+        tail = f"-{suffix}"
+        trimmed = candidate[: 50 - len(tail)].rstrip("._-")
+        value = f"{trimmed}{tail}"
+        if not taken(value):
+            return value
+        suffix += 1
+
+
+def _placeholder_email(
+    db: Session, provider: str, provider_user_id: str
+) -> str:
+    safe_id = re.sub(r"[^A-Za-z0-9._-]", "", provider_user_id) or "account"
+    base = f"{provider}-{safe_id}"
+    candidate = f"{base}@oauth.local"
+    suffix = 1
+    while get_user_by_email(db, candidate) is not None:
+        candidate = f"{base}-{suffix}@oauth.local"
+        suffix += 1
+    return candidate
+
+
+def get_or_create_oauth_user(
+    db: Session, profile: OAuthProfile
+) -> models.User:
+    """Devuelve el usuario vinculado a la cuenta externa, creándolo si hace falta.
+
+    Si el correo del proveedor está verificado y ya existe una cuenta local con
+    ese correo, se vincula la cuenta externa a la local en vez de duplicarla.
+    """
+    account = get_oauth_account(db, profile.provider, profile.provider_user_id)
+    if account is not None:
+        user = get_user(db, account.user_id)
+        if user is not None:
+            return user
+
+    user = None
+    if profile.email and profile.email_verified:
+        user = get_user_by_email(db, profile.email)
+
+    if user is None:
+        email = (
+            profile.email
+            if profile.email and profile.email_verified
+            else _placeholder_email(db, profile.provider, profile.provider_user_id)
+        )
+        base_username = (
+            profile.username
+            or (profile.email.split("@")[0] if profile.email else "")
+            or f"{profile.provider}user"
+        )
+        user = models.User(
+            username=_unique_username(db, base_username),
+            email=email,
+            hashed_password=hash_password(secrets.token_urlsafe(32)),
+            role=models.UserRole.user,
+        )
+        db.add(user)
+        db.flush()
+
+    account = models.OAuthAccount(
+        provider=profile.provider,
+        provider_user_id=profile.provider_user_id,
+        user_id=user.id,
+        email=profile.email,
+        username=profile.username,
+    )
+    db.add(account)
     db.commit()
     db.refresh(user)
     return user

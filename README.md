@@ -5,6 +5,7 @@ Backend sencillo de un sistema de tickets construido con FastAPI y SQLite.
 ## Características
 
 - Autenticación con JWT (registro, login y usuario actual).
+- Inicio de sesión con OAuth2 (GitHub y Google).
 - Refresco de tokens con rotación, revocación en base de datos y detección de reutilización.
 - Gestión de usuarios restringida a administradores (listado, detalle y eliminación).
 - CRUD de tickets (crear, listar, obtener, actualizar, eliminar).
@@ -66,6 +67,45 @@ La configuración se lee de variables de entorno:
 | `REFRESH_COOKIE_SAMESITE`    | `lax`                   | Política `SameSite` de la cookie              |
 | `CORS_ORIGINS`               | `*`                     | Orígenes permitidos, separados por comas       |
 
+### Inicio de sesión con OAuth2 (GitHub y Google)
+
+Además del usuario/contraseña, la API permite iniciar sesión con OAuth2
+(flujo *authorization code*) a través de GitHub y Google. Cada proveedor se
+configura con sus propias credenciales; si un proveedor no está configurado,
+su botón devuelve un error y el resto de la autenticación sigue funcionando.
+
+| Variable                   | Por defecto            | Descripción                                      |
+|----------------------------|------------------------|--------------------------------------------------|
+| `GITHUB_CLIENT_ID`         | —                      | Client ID de la OAuth App de GitHub              |
+| `GITHUB_CLIENT_SECRET`     | —                      | Client Secret de la OAuth App de GitHub          |
+| `GOOGLE_CLIENT_ID`         | —                      | Client ID del cliente OAuth de Google            |
+| `GOOGLE_CLIENT_SECRET`     | —                      | Client Secret del cliente OAuth de Google        |
+| `OAUTH_CALLBACK_BASE_URL`  | URL de la petición     | Base pública para construir el `redirect_uri` (detrás de proxies) |
+| `OAUTH_FRONTEND_REDIRECT`  | `/`                    | URL del frontend a la que se vuelve tras el login |
+| `OAUTH_HTTP_TIMEOUT_SECONDS` | `10`                 | Timeout de las llamadas a los proveedores        |
+
+URLs de callback que hay que registrar en cada proveedor:
+
+- GitHub: `{base}/api/auth/oauth/github/callback`
+- Google: `{base}/api/auth/oauth/google/callback`
+
+El flujo es:
+
+1. El navegador entra en `GET /api/auth/oauth/{provider}/login`.
+2. La API redirige al proveedor con un `state` aleatorio guardado en una cookie
+   `httpOnly` para prevenir CSRF.
+3. El proveedor vuelve a `GET /api/auth/oauth/{provider}/callback` con el código.
+4. La API canjea el código, lee el perfil, busca o crea el usuario local y
+   vincula la cuenta externa en la tabla `oauth_accounts`.
+5. Se emite el mismo par de tokens JWT que en el login normal: el refresh token
+   va en la cookie `httpOnly` y se redirige al frontend con `?oauth=success`.
+   La SPA canjea esa cookie por un access token llamando a `/api/auth/refresh`.
+
+Si el correo del proveedor está verificado y coincide con un usuario local, la
+cuenta externa se vincula a ese usuario. Los usuarios creados solo por OAuth
+reciben una contraseña aleatoria, por lo que no pueden entrar con usuario y
+contraseña hasta que se les establezca una.
+
 ## Requisitos
 
 - Python 3.10+
@@ -98,7 +138,7 @@ por el propio FastAPI desde `app/static/`. Guarda el access token JWT en
 en una cookie `httpOnly`, así que el navegador lo renueva de forma automática.
 Al abrirla:
 
-1. Crea una cuenta (o inicia sesión).
+1. Crea una cuenta, inicia sesión con usuario/contraseña o con GitHub/Google.
 2. Crea, filtra y busca tickets.
 3. Abre un ticket para ver/editar su estado y gestionar comentarios.
 
@@ -119,6 +159,9 @@ el refresh también falla.
 | POST   | `/api/auth/logout-all`  | Revoca todas las sesiones del usuario      |
 | GET    | `/api/auth/sessions`    | Lista las sesiones del usuario              |
 | GET    | `/api/auth/me`          | Devuelve el usuario autenticado            |
+| GET    | `/api/auth/oauth/providers`          | Lista los proveedores OAuth configurados |
+| GET    | `/api/auth/oauth/{provider}/login`    | Redirige al proveedor (github, google)   |
+| GET    | `/api/auth/oauth/{provider}/callback` | Callback del proveedor                   |
 
 ### Tickets
 
@@ -255,9 +298,11 @@ app/
 ├── schemas.py       # Esquemas Pydantic
 ├── crud.py          # Lógica de acceso a datos
 ├── security.py      # Hash de contraseñas, JWT y ajustes de cookies
+├── oauth.py         # Cliente OAuth2 de GitHub y Google
 ├── deps.py          # Dependencias (usuario autenticado)
 ├── routers/
 │   ├── auth.py      # Registro, login, refresco y cierre de sesión
+│   ├── oauth.py     # Login OAuth2 (GitHub y Google)
 │   ├── tickets.py   # Endpoints de tickets
 │   ├── comments.py  # Endpoints de comentarios
 │   └── users.py     # Endpoints de usuarios (solo admin)

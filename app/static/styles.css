@@ -80,6 +80,35 @@ input:focus, select:focus, textarea:focus {
 .auth-card .brand { font-size: 1.6rem; margin: 0 0 4px; text-align: center; }
 .auth-card .muted { margin-top: 0; text-align: center; }
 
+.oauth-buttons { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; }
+.btn-oauth {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; padding: 11px 16px;
+  border: 1px solid transparent; border-radius: 9px;
+  font-size: 0.92rem; font-weight: 600; text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.05s;
+}
+.btn-oauth:active { transform: translateY(1px); }
+.btn-oauth:focus-visible {
+  outline: none; box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.25);
+}
+.oauth-icon { width: 18px; height: 18px; flex-shrink: 0; }
+.btn-oauth-github { background: #24292f; color: #fff; border-color: #24292f; }
+.btn-oauth-github:hover { background: #1b1f24; border-color: #1b1f24; }
+.btn-oauth-google { background: #fff; color: var(--text); border-color: #dadce0; }
+.btn-oauth-google:hover {
+  background: #f8f9fa; border-color: #c6c9ce;
+  box-shadow: 0 1px 3px rgba(20, 30, 50, 0.08);
+}
+.divider {
+  display: flex; align-items: center; gap: 12px;
+  margin: 18px 0 0; color: var(--muted); font-size: 0.8rem;
+}
+.divider::before, .divider::after {
+  content: ""; flex: 1; height: 1px; background: var(--border);
+}
+
 .form { display: flex; flex-direction: column; gap: 14px; margin: 20px 0 0; }
 .form label {
   display: flex;

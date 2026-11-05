@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -62,6 +63,11 @@ class User(Base):
     )
 
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    oauth_accounts: Mapped[list["OAuthAccount"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )
@@ -138,3 +144,30 @@ class RefreshToken(Base):
     client_ip: Mapped[str | None] = mapped_column(String(45))
 
     user: Mapped["User"] = relationship(back_populates="refresh_tokens")
+
+
+class OAuthAccount(Base):
+    """Cuenta externa (GitHub, Google, ...) vinculada a un usuario local."""
+
+    __tablename__ = "oauth_accounts"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider", "provider_user_id", name="uq_oauth_provider_user"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    provider_user_id: Mapped[str] = mapped_column(
+        String(255), nullable=False, index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    email: Mapped[str | None] = mapped_column(String(255))
+    username: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="oauth_accounts")
