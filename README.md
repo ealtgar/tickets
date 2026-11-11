@@ -1,6 +1,6 @@
 # Tickets API
 
-Backend sencillo de un sistema de tickets construido con FastAPI y SQLite.
+Backend sencillo de un sistema de tickets construido con FastAPI y PostgreSQL.
 
 ## Características
 
@@ -53,6 +53,7 @@ La configuración se lee de variables de entorno:
 
 | Variable                     | Por defecto             | Descripción                                   |
 |------------------------------|-------------------------|-----------------------------------------------|
+| `DATABASE_URL`               | `postgresql+psycopg://tickets:tickets@localhost:5432/tickets` | Conexión a PostgreSQL |
 | `SECRET_KEY`                 | `dev-secret-change-me`  | Clave para firmar los access tokens           |
 | `REFRESH_SECRET_KEY`         | valor de `SECRET_KEY`   | Clave para firmar los refresh tokens          |
 | `JWT_ALGORITHM`              | `HS256`                 | Algoritmo de firma                            |
@@ -109,6 +110,7 @@ contraseña hasta que se les establezca una.
 ## Requisitos
 
 - Python 3.10+
+- PostgreSQL 14 o superior (o Docker para levantarlo con `docker compose`)
 
 ## Instalación
 
@@ -116,6 +118,35 @@ contraseña hasta que se les establezca una.
 python -m venv .venv
 source .venv/bin/activate        # En Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+```
+
+## Base de datos (PostgreSQL)
+
+La conexión se configura con la variable de entorno `DATABASE_URL`. El archivo
+`.env` de la raíz se carga automáticamente al arrancar la aplicación.
+
+```bash
+cp .env.example .env            # ajusta usuario, contraseña y base si hace falta
+```
+
+Para levantar un PostgreSQL local con Docker:
+
+```bash
+docker compose up -d db
+```
+
+El esquema se gestiona con **Alembic**. Antes de arrancar la API hay que aplicar
+las migraciones:
+
+```bash
+alembic upgrade head
+```
+
+Para cambios futuros en los modelos, genera y aplica una nueva migración:
+
+```bash
+alembic revision --autogenerate -m "descripción del cambio"
+alembic upgrade head
 ```
 
 ## Ejecución
@@ -129,6 +160,78 @@ Quedará disponible en:
 - Interfaz web: http://127.0.0.1:8000/
 - Swagger UI: http://127.0.0.1:8000/docs
 - ReDoc: http://127.0.0.1:8000/redoc
+
+### Migrar los datos desde SQLite
+
+Si vienes de la versión anterior basada en `tickets.db`, el script de traspaso
+copia usuarios, tickets, comentarios, refresh tokens y cuentas OAuth a
+PostgreSQL conservando los IDs originales y reajustando las secuencias:
+
+```bash
+# 1. Crea el esquema en PostgreSQL
+alembic upgrade head
+
+# 2. Copia los datos (la base destino debe estar vacía)
+python scripts/migrate_sqlite_to_postgres.py --sqlite-path tickets.db
+
+# Si la base destino ya tiene datos y quieres reemplazarlos:
+python scripts/migrate_sqlite_to_postgres.py --sqlite-path tickets.db --force
+```
+
+La URL de destino se toma de `DATABASE_URL`; también se puede indicar con
+`--database-url`.
+
+## Despliegue en Render
+
+El repositorio incluye `render.yaml`, un *Blueprint* que crea a la vez la base
+de datos PostgreSQL y el servicio web:
+
+1. Sube el proyecto a GitHub.
+2. En Render: **New → Blueprint**, selecciona el repositorio y aplica el
+   blueprint.
+3. Render crea la base `tickets-db`, el servicio `tickets-api` y genera
+   automáticamente `SECRET_KEY` y `REFRESH_SECRET_KEY`.
+4. En cada despliegue se ejecuta `scripts/start.sh`, que aplica
+   `alembic upgrade head` y arranca Uvicorn en el puerto `$PORT`.
+
+Variables que configura el blueprint:
+
+| Variable                 | Valor                                  |
+|--------------------------|----------------------------------------|
+| `DATABASE_URL`           | Cadena de conexión interna de Render   |
+| `SECRET_KEY`             | Generada por Render                    |
+| `REFRESH_SECRET_KEY`     | Generada por Render                    |
+| `REFRESH_COOKIE_SECURE`  | `true` (Render sirve por HTTPS)        |
+| `REFRESH_COOKIE_SAMESITE`| `lax`                                  |
+| `PYTHON_VERSION`         | `3.13.5`                               |
+
+Si usas OAuth, después del primer despliegue añade en el panel de Render:
+
+```text
+OAUTH_CALLBACK_BASE_URL=https://<tu-servicio>.onrender.com
+```
+
+y registra en GitHub/Google los callbacks:
+
+- `https://<tu-servicio>.onrender.com/api/auth/oauth/github/callback`
+- `https://<tu-servicio>.onrender.com/api/auth/oauth/google/callback`
+
+Notas sobre el plan gratuito de Render:
+
+- El servicio web se suspende tras un periodo de inactividad; la primera
+  petición puede tardar en responder.
+- La base de datos PostgreSQL gratuita caduca a los 30 días. Para producción,
+  cambia `plan: free` por un plan de pago en `render.yaml`.
+
+### Despliegue manual (sin blueprint)
+
+Si prefieres configurarlo a mano en el panel de Render:
+
+- **Build Command:** `pip install -r requirements.txt`
+- **Start Command:** `bash scripts/start.sh`
+- **Health Check Path:** `/health`
+- Crea una base PostgreSQL y copia su *Internal Connection String* en la
+  variable `DATABASE_URL` del servicio web.
 
 ## Frontend
 
@@ -293,7 +396,8 @@ curl -X DELETE http://127.0.0.1:8000/api/users/2 \
 ```
 app/
 ├── main.py          # Aplicación FastAPI y configuración
-├── database.py      # Motor, sesión y Base de SQLAlchemy
+├── config.py        # Carga del archivo .env
+├── database.py      # Motor, sesión y Base de SQLAlchemy (PostgreSQL)
 ├── models.py        # Modelos ORM (tickets, comentarios, usuarios, refresh tokens)
 ├── schemas.py       # Esquemas Pydantic
 ├── crud.py          # Lógica de acceso a datos
@@ -310,4 +414,16 @@ app/
     ├── index.html
     ├── styles.css
     └── app.js
+
+.env.example         # Plantilla de variables de entorno
+.python-version      # Versión de Python para Render
+render.yaml          # Blueprint de Render (servicio + PostgreSQL)
+alembic.ini          # Configuración de Alembic
+migrations/          # Migraciones del esquema
+├── env.py
+└── versions/
+scripts/
+├── start.sh                        # Migraciones + Uvicorn para producción
+└── migrate_sqlite_to_postgres.py   # Traspaso de datos desde tickets.db
+docker-compose.yml   # PostgreSQL local para desarrollo
 ```

@@ -33,6 +33,7 @@ share/python-wheels/
 # =========================
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 *.cert

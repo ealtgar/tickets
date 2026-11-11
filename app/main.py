@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import crud
-from .database import Base, SessionLocal, engine
+from .database import SessionLocal
 from .routers import auth, comments, oauth, tickets, users
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -27,8 +27,6 @@ async def lifespan(app: FastAPI):
         print(f"[auth] {removed} refresh tokens expirados eliminados")
     yield
 
-
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Tickets API",
